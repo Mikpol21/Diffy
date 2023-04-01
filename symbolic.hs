@@ -1,5 +1,8 @@
 module Expr where
 
+import Env
+import Prelude hiding (lookup)
+
 data Expr = Expr :+: Expr
         | Expr :-:  Expr
         | Expr :*: Expr
@@ -10,6 +13,7 @@ data Expr = Expr :+: Expr
         | Exp Expr
         | Log Expr
         | Expr :^: Expr
+        | Apply String [Expr]
 
 infixl 6 :+:
 infixl 6 :-:
@@ -17,8 +21,6 @@ infixl 7 :*:
 infixl 7 :/:
 infixr 8 :^:
 infixl 9 :.:
--- 
-
 
 
 instance Show Expr where
@@ -32,13 +34,12 @@ instance Show Expr where
     show (Exp e) = "exp(" ++ show e ++ ")"
     show (Log e) = "log(" ++ show e ++ ")"
     show (e1 :^: e2) = show e1 ++ "^" ++ show e2
+    show (Apply f args) = f ++ "[" ++ showArgs args ++ "]"
+        where showArgs [] = ""
+              showArgs [x] = show x
+              showArgs (x:xs) = show x ++ ", " ++ showArgs xs
 
 type R = Double
-type Failable a = Either String a
-type Env a = String -> Failable a
-
-singleton_env :: String -> a -> Env a
-singleton_env x v = \y -> if x == y then Right v else Left ("Unbound variable " ++ y)
 
 class Doubleable a where
     fromDouble :: Double -> a
@@ -50,7 +51,9 @@ class (Eq a, Doubleable a, Floating a) => Evaluable a
 
 instance Evaluable Double
 
-eval :: Evaluable a => Expr -> Env a -> Failable a
+type FuncEnv a = Env (Either a ([Expr] -> Expr, Int))
+
+eval :: Evaluable a => Expr -> FuncEnv a -> Failable a
 eval (e1 :+: e2) env = do
     v1 <- eval e1 env
     v2 <- eval e2 env
@@ -69,7 +72,11 @@ eval (e1 :/: e2) env = do
     if v2 == fromDouble 0 then Left "Division by zero"
     else return (v1 / v2)
 eval (c :.: e) env = fmap (fromDouble c*) $ eval e env
-eval (Var x) env = env x
+eval (Var x) env = do
+    v <- lookup x env
+    case v of
+        Left c -> return c
+        Right (f, _) -> fail $ "Variable " ++ x ++ " is not a constant"
 eval (Const c) env = return $ fromDouble c
 eval (Exp e) env = fmap exp $ eval e env
 eval (Log e) env = fmap log $ eval e env
@@ -77,6 +84,28 @@ eval (e1 :^: e2) env = do
     v1 <- eval e1 env
     v2 <- eval e2 env
     return (v1 ** v2)
+eval (Apply f args) env = do
+    x <- lookup f env
+    case x of 
+        Left _ -> fail $ f ++ " is a constant"
+        Right (func, arity) -> if length args == arity 
+            then eval (func args) env 
+            else fail $ "Wrong number of arguments for " ++ f
+        
+
+substitute :: Expr -> String -> Expr -> Expr
+substitute (e1 :+: e2) x e = substitute e1 x e :+: substitute e2 x e
+substitute (e1 :-: e2) x e = substitute e1 x e :-: substitute e2 x e
+substitute (e1 :*: e2) x e = substitute e1 x e :*: substitute e2 x e
+substitute (e1 :/: e2) x e = substitute e1 x e :/: substitute e2 x e
+substitute (c :.: e') x e = c :.: substitute e' x e
+substitute (Var x') x e = if x == x' then e else Var x'
+substitute (Const c) _ _ = Const c
+substitute (Exp e) x e' = Exp (substitute e x e')
+substitute (Log e) x e' = Log (substitute e x e')
+substitute (e1 :^: e2) x e' = substitute e1 x e' :^: substitute e2 x e'
+substitute (Apply f args) x e = Apply f (map (\e -> substitute e x e) args)
+
 
 
 sum_expr :: [Expr] -> Expr
@@ -100,7 +129,7 @@ newton_method :: Expr -> String -> R -> R -> Int -> Failable R
 newton_method f x x0 eps max_iter = newton_method' f x x0 eps 0
     where
         newton_method' f x x0 eps n = do
-            let env = singleton_env x x0
+            let env = singleton x (Left x0)
             vx <- eval f env
             dx <- eval (diff f x) env
             let x1 = x0 - vx / dx

@@ -1,6 +1,6 @@
 module Dual where
-import Expr (Doubleable(..), fromDouble, Evaluable(..))
-data Dual a =  Const Double | Dual a a
+import Expr (Doubleable(..), fromDouble, Evaluable(..), Expr, Failable, singleton_env, eval)
+data Dual a =  Const Double | Dual {value :: a, deriv :: a}
   deriving (Eq)
 
 instance Doubleable a => Doubleable (Dual a) where
@@ -22,6 +22,7 @@ instance (Doubleable a, Num a) => Num (Dual a) where
     (Const x) * (Dual y z) = Dual (fromDouble x * y) (fromDouble x * z)
     (Dual x y) * (Const z) = Dual (x * fromDouble z) (y * fromDouble z)
     (Dual x y) * (Dual z w) = Dual (x * z) (x * w + y * z)
+
 
     negate (Const x) = Const (negate x)
     negate (Dual x y) = Dual (negate x) (negate y)
@@ -63,3 +64,8 @@ instance (Doubleable a, Floating a) => Floating (Dual a) where
     atanh (Const x) = Const (atanh x)
     atanh (Dual x y) = Dual (atanh x) (y / ((sqrt (1 - x * x))))
 
+diff :: Expr -> Double -> String -> Failable Double
+diff e x0 x = fmap deriv $ eval e (singleton_env x (Dual x0 1.0))
+
+hessian :: Expr -> Double -> String -> Failable Double
+hessian e x0 x = fmap (deriv . deriv) $ eval e (singleton_env x (Dual (Dual x0 1.0) (Dual 1.0 0.0)))
