@@ -13,6 +13,7 @@ import Prelude hiding (length, zipWith, map, sum, fromList, (!), head)
 
 type M a = Vector (Vector a)
 type V a = Vector a
+type R = Float
 
 data MatrixExpr where
     (:+) :: MatrixExpr -> MatrixExpr -> MatrixExpr
@@ -50,5 +51,5 @@ reduce (f :@ e) = map (map f) (reduce e)
 reduce (e1 :* e2) = let
     r1 = reduce e1
     r2 = reduce e2
-    in  if snd (shape r1) /= fst (shape r2) then error "Matrix dimensions do not match"
+    in  if snd (shape e1) /= fst (shape e2) then error "Matrix dimensions do not match"
         else fromList [fromList [sum_expr [r1 ! i ! k :*: r2 ! k ! j | k <- [0..(length r1 - 1)]] | j <- [0..(length r2) - 1]] | i <- [0..(length r1 - 1)]]
