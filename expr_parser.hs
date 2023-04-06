@@ -8,8 +8,10 @@ import Stmt
 import Prelude hiding (fail, lookup)
 
 
+
+
 parse_sequence, parse_stmt :: Parser Stmt
-parse_sequence = chainl (symbol ";" >> return Sequence) (parse_var_decl <|> parse_func_decl <|> fmap Expression parse_expr)
+parse_sequence = chainl (symbol ";" >> return Sequence) (parse_var_decl <|> parse_func_decl <|> fmap Expression parse_expr <|> parse_command)
 parse_stmt = parse_sequence
 
 parse_var_decl :: Parser Stmt
@@ -27,12 +29,23 @@ parse_func_decl = do
     symbol "["
     args <- sepBy "," parse_var_name
     symbol "]"
-    symbol "="
+    symbol "= {"
     expr <- parse_expr
+    symbol "}"
     return $ FuncDecl name (\args' -> foldr (\(x, y) e -> substitute e x y) expr (zip args args')) (length args)
 
 parse_expr :: Parser Expr
-parse_expr = parse_add
+parse_expr = (parse_let <|> parse_add)
+
+parse_let :: Parser Expr
+parse_let = do
+    symbol "let"
+    name <- parse_var_name
+    symbol "="
+    expr <- parse_expr
+    symbol ";"
+    body <- (parse_let <|> parse_add)
+    return (Let name expr body)
 
 parse_add :: Parser Expr
 parse_add = chainl (symbol "+" >> return (:+:)) (parse_sub)
@@ -93,7 +106,7 @@ parse_var_name = do
     if name `elem` forbidden_words then fail "Invalid variable name" else return name
 
 forbidden_words :: [String]
-forbidden_words = ["exp", "log", "let"]
+forbidden_words = ["exp", "log", "let", "func", "grad", "let", "var"] ++ commands
 
 parse_double :: Parser Double
 parse_double = (do
@@ -101,3 +114,24 @@ parse_double = (do
     char '.'
     y <- num
     return (fromIntegral x + fromIntegral y / (10.0 ^ (length $ show y)))) <|> (fmap fromIntegral num :: Parser Double)
+
+commands :: [String]
+commands = ["grad", "minimize"]
+
+parse_command :: Parser Stmt
+parse_command = do
+    name <- oneOfs commands
+    symbol "["
+    args <- sepBy "," parse_argument
+    symbol "]"
+    return $ Command name args
+
+parse_argument :: Parser Argument
+parse_argument = (do
+    symbol "var"
+    name <- parse_var_name
+    return $ ArgVar name) <|> (do
+    x <- parse_double
+    return $ ArgConst x) <|> (do
+    x <- parse_expr
+    return $ ArgExpr x)

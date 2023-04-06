@@ -14,6 +14,7 @@ data Expr = Expr :+: Expr
         | Log Expr
         | Expr :^: Expr
         | Apply String [Expr]
+        | Let String Expr Expr
 
 infixl 6 :+:
 infixl 6 :-:
@@ -34,6 +35,7 @@ instance Show Expr where
     show (Exp e) = "exp(" ++ show e ++ ")"
     show (Log e) = "log(" ++ show e ++ ")"
     show (e1 :^: e2) = show e1 ++ "^" ++ show e2
+    show (Let x e1 e2) = x ++ " = " ++ show e1 ++ "; " ++ show e2
     show (Apply f args) = f ++ "[" ++ showArgs args ++ "]"
         where showArgs [] = ""
               showArgs [x] = show x
@@ -43,9 +45,11 @@ type R = Double
 
 class Doubleable a where
     fromDouble :: Double -> a
+    toDouble :: a -> Double
 
 instance Doubleable Double where
     fromDouble = id
+    toDouble = id
 
 class (Eq a, Doubleable a, Floating a) => Evaluable a
 
@@ -91,6 +95,9 @@ eval (Apply f args) env = do
         Right (func, arity) -> if length args == arity 
             then eval (func args) env 
             else fail $ "Wrong number of arguments for " ++ f
+eval (Let x e1 e2) env = do
+    v <- eval e1 env
+    eval e2 (extend env (x, (Left v)))
         
 
 substitute :: Expr -> String -> Expr -> Expr
@@ -105,6 +112,7 @@ substitute (Exp e) x e' = Exp (substitute e x e')
 substitute (Log e) x e' = Log (substitute e x e')
 substitute (e1 :^: e2) x e' = substitute e1 x e' :^: substitute e2 x e'
 substitute (Apply f args) x e = Apply f (map (\e -> substitute e x e) args)
+substitute (Let x' e1 e2) x e = Let x' (substitute e1 x e) (substitute e2 x e)
 
 
 
