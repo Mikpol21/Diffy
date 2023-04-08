@@ -9,6 +9,12 @@ instance Doubleable a => Doubleable (Dual a) where
     toDouble (Const x) = x
     toDouble (Dual x _) = toDouble x
 
+instance (Ord a, Doubleable a) => Ord (Dual a) where
+    compare (Const x) (Const y) = compare x y
+    compare (Const x) (Dual y _) = compare x (toDouble y)
+    compare (Dual x _) (Const y) = compare (toDouble x) y
+    compare (Dual x _) (Dual y _) = compare x y
+
 instance Evaluable a => Evaluable (Dual a)
 
 instance Show a => Show (Dual a) where

@@ -2,6 +2,7 @@ module Expr where
 
 import Env
 import Prelude hiding (lookup)
+import Debug.Trace
 
 data Expr = Expr :+: Expr
         | Expr :-:  Expr
@@ -15,6 +16,8 @@ data Expr = Expr :+: Expr
         | Expr :^: Expr
         | Apply String [Expr]
         | Let String Expr Expr
+        | If Cond Expr Expr
+        | While Cond Expr
 
 infixl 6 :+:
 infixl 6 :-:
@@ -51,7 +54,7 @@ instance Doubleable Double where
     fromDouble = id
     toDouble = id
 
-class (Eq a, Doubleable a, Floating a) => Evaluable a
+class (Eq a, Doubleable a, Floating a, Ord a, Show a) => Evaluable a
 
 instance Evaluable Double
 
@@ -175,3 +178,65 @@ prune0 (e1 :/: e2) =
     else prune0 e1 :/: prune0 e2
 prune0 (c :.: e) = if c == 0 then Const 0 else c :.: prune0 e
 prune0 e = e
+
+
+
+------------------------------
+data Cond = Cond :&&: Cond
+        | Cond :||: Cond
+        | Not Cond
+        | Expr :==: Expr
+        | Expr :<: Expr
+        | Expr :>: Expr
+        | Expr :<=: Expr
+        | Expr :>=: Expr
+        | FalseCond
+        | TrueCond
+        deriving (Eq)
+
+instance Show Cond where
+    show (e1 :==: e2) = show e1 ++ " == " ++ show e2
+    show (e1 :<: e2) = show e1 ++ " < " ++ show e2
+    show (e1 :>: e2) = show e1 ++ " > " ++ show e2
+    show (e1 :<=: e2) = show e1 ++ " <= " ++ show e2
+    show (e1 :>=: e2) = show e1 ++ " >= " ++ show e2
+    show (c1 :&&: c2) = show c1 ++ " && " ++ show c2
+    show (c1 :||: c2) = show c1 ++ " || " ++ show c2
+    show (Not c) = "!" ++ show c
+    show TrueCond = "true"
+    show FalseCond = "false"
+
+eval_cond :: Cond -> Env -> Failable Bool
+eval_cond (e1 :==: e2) env = do
+    v1 <- eval e1 env
+    v2 <- eval e2 env
+    return $ v1 == v2
+eval_cond (e1 :<: e2) env = do
+    v1 <- eval e1 env
+    v2 <- eval e2 env
+    return $ v1 < v2
+eval_cond (e1 :>: e2) env = do
+    v1 <- eval e1 env
+    v2 <- eval e2 env
+    return $ v1 > v2
+eval_cond (e1 :<=: e2) env = do
+    v1 <- eval e1 env
+    v2 <- eval e2 env
+    return $ v1 <= v2
+eval_cond (e1 :>=: e2) env = do
+    v1 <- eval e1 env
+    v2 <- eval e2 env
+    return $ v1 >= v2
+eval_cond (c1 :&&: c2) env = do
+    v1 <- eval_cond c1 env
+    v2 <- eval_cond c2 env
+    return $ v1 && v2
+eval_cond (c1 :||: c2) env = do
+    v1 <- eval_cond c1 env
+    v2 <- eval_cond c2 env
+    return $ v1 || v2
+eval_cond (Not c) env = do
+    v <- eval_cond c env
+    return $ not v
+eval_cond TrueCond _ = return True
+eval_cond FalseCond _ = return False

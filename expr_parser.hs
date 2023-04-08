@@ -29,7 +29,7 @@ parse_func_decl = do
     symbol "["
     args <- sepBy "," parse_var_name
     symbol "]"
-    symbol "= {"
+    symbol "{"
     expr <- parse_expr
     symbol "}"
     return $ FuncDecl name (\args' -> foldr (\(x, y) e -> substitute e x y) expr (zip args args')) (length args)
@@ -109,14 +109,14 @@ forbidden_words :: [String]
 forbidden_words = ["exp", "log", "let", "func", "grad", "let", "var"] ++ commands
 
 parse_double :: Parser Double
-parse_double = (do
+parse_double = ((symbol "-" >> return ((-1) * )) <|> return id) <*> (do
     x <- num
     char '.'
     y <- num
     return (fromIntegral x + fromIntegral y / (10.0 ^ (length $ show y)))) <|> (fmap fromIntegral num :: Parser Double)
 
 commands :: [String]
-commands = ["grad", "minimize"]
+commands = ["grad", "root", "minimize"]
 
 parse_command :: Parser Stmt
 parse_command = do
