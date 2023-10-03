@@ -1,2 +1,7 @@
 *.o
 *.hi
+main
+dist
+MAIN
+tests
+tmp.txt
